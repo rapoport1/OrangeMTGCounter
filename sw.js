@@ -1,7 +1,10 @@
-const CACHE_NAME = 'mtg-counter-v1';
+const CACHE_NAME = 'mtg-counter-v2'; // Updated version
 const urlsToCache = [
-  '/',
-  '/index.html',
+  './',
+  'index.html',
+  'manifest.json',
+  'icon-192x192.png',
+  'icon-512x512.png',
   'https://cdn.tailwindcss.com',
   'https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700;900&display=swap'
 ];
