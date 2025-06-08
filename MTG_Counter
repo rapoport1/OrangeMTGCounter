@@ -1,0 +1,663 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MTG Commander Life Counter</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700;900&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-main: #121212; /* Spotify-esque deep charcoal */
+            --bg-surface: #1E1E1E; /* Slightly lighter surface for cards */
+            --primary: #1DB954; /* Spotify Green, tweaked for vibrancy */
+            --primary-hover: #1ED760;
+            --accent-spice: #D97706; /* Dune-inspired spice orange */
+            --accent-gold-bg: linear-gradient(145deg, #FBBF24, #D97706); /* Rich gold gradient */
+            --text-on-gold: #422006; /* Dark brown for text on gold, for contrast */
+            --text-primary: #E5E7EB; /* Off-white for readability */
+            --text-secondary: #A7A7A7;
+            --border-color: #2c2c2c;
+        }
+
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: var(--bg-main);
+            color: var(--text-primary);
+        }
+        #gameScreen {
+            /* Add padding to prevent rotated cards from touching screen edges */
+            @apply p-4 md:p-6;
+        }
+        .btn {
+            @apply px-6 py-3 rounded-lg font-bold text-lg shadow-md transition-all duration-200 ease-in-out transform hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed border;
+        }
+        .btn-primary {
+            background-color: var(--primary);
+            border-color: var(--primary);
+            color: white;
+        }
+        .btn-primary:hover {
+            background-color: var(--primary-hover);
+            border-color: var(--primary-hover);
+        }
+        .btn-secondary {
+            background-color: var(--bg-surface);
+            border-color: var(--border-color);
+            color: var(--text-primary);
+        }
+        .btn-secondary:hover {
+            background-color: #2a2a2a;
+            border-color: #444;
+        }
+        .btn-selected {
+            @apply scale-105 ring-4;
+            background-color: var(--accent-spice);
+            border-color: var(--accent-spice);
+            color: white;
+            ring-color: var(--accent-spice);
+            box-shadow: 0 0 15px rgba(217, 119, 6, 0.5);
+        }
+        .player-card {
+            background-color: var(--bg-surface);
+            @apply rounded-2xl shadow-lg p-4 md:p-6 flex flex-col items-center gap-4 transition-transform duration-300 border;
+            border-color: var(--border-color);
+        }
+        .first-player-glow {
+            @apply ring-4 ring-offset-4;
+            ring-color: var(--accent-spice);
+            ring-offset-color: var(--bg-main);
+            box-shadow: 0 0 20px rgba(217, 119, 6, 0.6);
+        }
+        .life-adj-btn {
+            background-color: #2a2a2a;
+            @apply w-full py-3 rounded-lg text-xl font-bold flex items-center justify-center shadow-inner transition-all border;
+            border-color: var(--border-color);
+        }
+        .life-adj-btn:hover {
+             background-color: #333;
+            border-color: #555;
+        }
+        .cmdr-btn, .other-counter-btn {
+            @apply w-6 h-6 rounded-full text-lg font-bold flex items-center justify-center shadow-sm transition-all border;
+        }
+        .life-total {
+            color: var(--primary);
+            text-shadow: 0 0 10px rgba(29, 185, 84, 0.3);
+        }
+        .player-name-input {
+            background-color: rgba(0,0,0,0.3); /* Added for contrast */
+            @apply text-center text-2xl font-bold w-full p-1 rounded-md focus:outline-none focus:ring-2;
+            color: var(--text-primary);
+            border-color: var(--accent-spice);
+            caret-color: var(--primary);
+        }
+        .player-name-input:focus {
+            background-color: #2a2a2a;
+            ring-color: var(--primary);
+        }
+        .history-log {
+            @apply h-48 overflow-y-auto p-3 rounded-lg text-sm;
+            background-color: var(--bg-main);
+        }
+        .history-log-entry {
+            @apply mb-2 pb-2 border-b;
+            border-color: var(--border-color);
+        }
+        .history-log-entry:last-child {
+            @apply border-b-0;
+        }
+        .toggle-switch {
+            @apply relative inline-flex items-center h-6 rounded-full w-11 transition-colors duration-300 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500;
+        }
+        .toggle-switch.on {
+             background-color: var(--primary);
+        }
+        .toggle-knob {
+            @apply inline-block w-4 h-4 transform bg-white rounded-full transition-transform duration-300;
+        }
+        .toggle-switch.on .toggle-knob {
+            @apply translate-x-5;
+        }
+    </style>
+</head>
+<body class="transition-colors duration-300">
+
+    <!-- Screen 1: Game Setup -->
+    <div id="setupScreen" class="min-h-screen flex flex-col items-center justify-center p-4">
+        <div class="text-center space-y-12 w-full max-w-2xl">
+            <h1 class="text-5xl md:text-6xl font-black tracking-tighter text-transparent bg-clip-text bg-gradient-to-r from-gray-200 to-gray-400">MTG Life Counter</h1>
+            
+            <div class="space-y-4">
+                <h2 class="text-2xl font-bold" style="color: var(--text-secondary);">Players</h2>
+                <div id="player-count-selector" class="flex flex-wrap justify-center gap-3">
+                    <button data-count="1" class="btn btn-secondary">1</button>
+                    <button data-count="2" class="btn btn-secondary">2</button>
+                    <button data-count="3" class="btn btn-secondary">3</button>
+                    <button data-count="4" class="btn btn-secondary">4</button>
+                    <button data-count="5" class="btn btn-secondary">5</button>
+                    <button data-count="6" class="btn btn-secondary">6</button>
+                </div>
+            </div>
+
+            <div class="space-y-4">
+                <h2 class="text-2xl font-bold" style="color: var(--text-secondary);">Starting Life</h2>
+                <div id="life-total-selector" class="flex flex-wrap justify-center gap-3">
+                    <button data-life="20" class="btn btn-secondary">20</button>
+                    <button data-life="30" class="btn btn-secondary">30</button>
+                    <button data-life="40" class="btn btn-secondary">40</button>
+                    <button data-life="50" class="btn btn-secondary">50</button>
+                </div>
+            </div>
+
+            <button id="startGameBtn" class="btn btn-primary w-full md:w-auto text-2xl !py-4 !px-12">Start Game</button>
+        </div>
+    </div>
+
+    <!-- Screen 2: Game Screen -->
+    <div id="gameScreen" class="hidden">
+        <div id="player-grid" class="min-h-screen w-full grid gap-4 items-center justify-center"></div>
+        <button id="settings-fab" class="fixed bottom-6 right-6 h-16 w-16 rounded-full shadow-lg flex items-center justify-center z-40" style="background-color: var(--bg-surface); border: 1px solid var(--border-color);">
+            <svg class="w-8 h-8" style="color: var(--text-secondary);" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path></svg>
+        </button>
+    </div>
+
+    <!-- Screen 3: Settings Modal -->
+    <div id="settingsScreen" class="fixed inset-0 bg-black bg-opacity-70 hidden items-center justify-center p-4 z-50">
+        <div class="w-full max-w-md rounded-2xl shadow-2xl p-6 space-y-6 border" style="background-color: var(--bg-surface); border-color: var(--border-color);">
+            <div class="flex justify-between items-center">
+                <h2 class="text-3xl font-bold">Settings</h2>
+                <button id="closeSettingsBtn" class="text-gray-500 hover:text-gray-200">
+                     <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+                </button>
+            </div>
+            
+             <div class="space-y-3">
+                <h3 class="text-xl font-semibold">Game Log</h3>
+                <div id="historyLog" class="history-log">
+                    <!-- Log entries will be injected here -->
+                </div>
+            </div>
+            
+            <div class="space-y-3">
+                <h3 class="text-xl font-semibold">Display Options</h3>
+                <div class="flex items-center justify-between p-4 rounded-lg" style="background-color: var(--bg-main);">
+                    <label for="otherCountersToggle" class="font-medium text-lg">Show Other Counters</label>
+                    <button id="otherCountersToggle" class="toggle-switch">
+                        <span class="sr-only">Toggle Other Counters</span>
+                        <span class="toggle-knob"></span>
+                    </button>
+                </div>
+            </div>
+
+            <div class="space-y-3">
+                <h3 class="text-xl font-semibold">Dice Roller</h3>
+                <div class="flex justify-between items-center p-4 rounded-lg" style="background-color: var(--bg-main);">
+                    <div id="dice-roller" class="flex gap-2">
+                        <button data-sides="6" class="btn btn-secondary !px-4 !py-2 !text-base">D6</button>
+                        <button data-sides="20" class="btn btn-secondary !px-4 !py-2 !text-base">D20</button>
+                        <button data-sides="100" class="btn btn-secondary !px-4 !py-2 !text-base">D100</button>
+                    </div>
+                    <div id="dice-result" class="text-4xl font-black" style="color: var(--accent-spice);">-</div>
+                </div>
+            </div>
+
+            <div class="space-y-3">
+                <h3 class="text-xl font-semibold">Game Actions</h3>
+                <div class="flex flex-col gap-3">
+                    <button id="resetGameBtn" class="btn btn-secondary w-full">Reset Game</button>
+                    <button id="newGameBtn" class="btn btn-primary w-full">New Game</button>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Confirmation Modal -->
+    <div id="confirmationModal" class="fixed inset-0 bg-black bg-opacity-70 hidden items-center justify-center p-4 z-[60]">
+        <div class="w-full max-w-sm rounded-2xl shadow-2xl p-6 text-center space-y-4 border" style="background-color: var(--bg-surface); border-color: var(--border-color);">
+            <h3 id="confirmationTitle" class="text-2xl font-bold">Are you sure?</h3>
+            <p id="confirmationMessage" style="color: var(--text-secondary);">This will reset all scores.</p>
+            <div class="flex gap-4 justify-center">
+                <button id="confirmBtn" class="btn btn-primary">Confirm</button>
+                <button id="cancelBtn" class="btn btn-secondary">Cancel</button>
+            </div>
+        </div>
+    </div>
+
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+    // --- STATE MANAGEMENT ---
+    let gameState = {
+        playerCount: null,
+        startingLife: null,
+        players: [],
+        history: [],
+        showOtherCounters: true,
+    };
+    let confirmCallback = null;
+
+    // --- DOM ELEMENT CACHE ---
+    const dom = {
+        setupScreen: document.getElementById('setupScreen'),
+        gameScreen: document.getElementById('gameScreen'),
+        settingsScreen: document.getElementById('settingsScreen'),
+        confirmationModal: document.getElementById('confirmationModal'),
+        
+        playerCountSelector: document.getElementById('player-count-selector'),
+        lifeTotalSelector: document.getElementById('life-total-selector'),
+        startGameBtn: document.getElementById('startGameBtn'),
+
+        playerGrid: document.getElementById('player-grid'),
+        settingsFab: document.getElementById('settings-fab'),
+        
+        closeSettingsBtn: document.getElementById('closeSettingsBtn'),
+        historyLog: document.getElementById('historyLog'),
+        otherCountersToggle: document.getElementById('otherCountersToggle'),
+        diceRoller: document.getElementById('dice-roller'),
+        diceResult: document.getElementById('dice-result'),
+        resetGameBtn: document.getElementById('resetGameBtn'),
+        newGameBtn: document.getElementById('newGameBtn'),
+
+        confirmationTitle: document.getElementById('confirmationTitle'),
+        confirmationMessage: document.getElementById('confirmationMessage'),
+        confirmBtn: document.getElementById('confirmBtn'),
+        cancelBtn: document.getElementById('cancelBtn'),
+    };
+
+    // --- INITIALIZATION ---
+    const initialize = () => {
+        setupEventListeners();
+        selectButton(dom.playerCountSelector, '[data-count="4"]');
+        gameState.playerCount = 4;
+        selectButton(dom.lifeTotalSelector, '[data-life="40"]');
+        gameState.startingLife = 40;
+        updateToggleState(dom.otherCountersToggle, gameState.showOtherCounters);
+    };
+
+    // --- EVENT LISTENERS ---
+    const setupEventListeners = () => {
+        dom.playerCountSelector.addEventListener('click', handleSetupSelection);
+        dom.lifeTotalSelector.addEventListener('click', handleSetupSelection);
+        dom.startGameBtn.addEventListener('click', startGame);
+
+        dom.playerGrid.addEventListener('input', (e) => {
+            if (e.target.matches('.player-name-input')) {
+                handleNameChange(e);
+            }
+        });
+        dom.playerGrid.addEventListener('click', handleGameInteraction);
+        
+        dom.settingsFab.addEventListener('click', () => {
+            renderHistoryLog();
+            toggleModal(dom.settingsScreen, true);
+        });
+        dom.closeSettingsBtn.addEventListener('click', () => toggleModal(dom.settingsScreen, false));
+        
+        dom.otherCountersToggle.addEventListener('click', () => {
+            gameState.showOtherCounters = !gameState.showOtherCounters;
+            updateToggleState(dom.otherCountersToggle, gameState.showOtherCounters);
+            renderGameBoard(); // Re-render to show/hide counters
+        });
+        
+        dom.diceRoller.addEventListener('click', handleDiceRoll);
+        
+        dom.resetGameBtn.addEventListener('click', () => {
+            showConfirmation('Reset Game?', 'This will reset all scores.', resetGame);
+        });
+        dom.newGameBtn.addEventListener('click', () => {
+            showConfirmation('Start New Game?', 'This will return to the setup screen.', goHome);
+        });
+
+        dom.confirmBtn.addEventListener('click', () => {
+            if (typeof confirmCallback === 'function') confirmCallback();
+            toggleModal(dom.confirmationModal, false);
+        });
+        dom.cancelBtn.addEventListener('click', () => toggleModal(dom.confirmationModal, false));
+    };
+
+    // --- SETUP & GAME START ---
+    const handleSetupSelection = (e) => {
+        const button = e.target.closest('button');
+        if (!button) return;
+        
+        const count = button.dataset.count;
+        const life = button.dataset.life;
+
+        if (count) {
+            gameState.playerCount = parseInt(count, 10);
+            selectButton(dom.playerCountSelector, `[data-count="${count}"]`);
+        } else if (life) {
+            gameState.startingLife = parseInt(life, 10);
+            selectButton(dom.lifeTotalSelector, `[data-life="${life}"]`);
+        }
+    };
+
+    const selectButton = (container, selector) => {
+        container.querySelectorAll('button').forEach(btn => btn.classList.remove('btn-selected'));
+        const button = container.querySelector(selector);
+        if (button) button.classList.add('btn-selected');
+    };
+
+    const startGame = () => {
+        gameState.players = [];
+        for (let i = 1; i <= gameState.playerCount; i++) {
+            gameState.players.push({
+                id: i,
+                name: `Player ${i}`,
+                life: gameState.startingLife,
+                commanderDamage: {},
+                poison: 0,
+                energy: 0,
+            });
+        }
+
+        gameState.players.forEach(p => {
+            if (gameState.playerCount > 1) {
+                for (let j = 1; j <= gameState.playerCount; j++) {
+                    if (p.id !== j) p.commanderDamage[j] = 0;
+                }
+            }
+        });
+
+        gameState.history = [];
+        logAction('New game started.');
+
+        renderGameBoard();
+        
+        dom.setupScreen.style.display = 'none';
+        dom.gameScreen.style.display = 'block';
+
+        highlightFirstPlayer();
+    };
+
+    // --- RENDERING ---
+    const renderGameBoard = () => {
+        const grid = dom.playerGrid;
+        
+        // --- Preserve focus on name input during re-render ---
+        const activeElement = document.activeElement;
+        let focusedPlayerId = null;
+        let selectionStart = null;
+        if (activeElement && activeElement.matches('.player-name-input')) {
+            const card = activeElement.closest('.player-card');
+            focusedPlayerId = card.dataset.playerId;
+            selectionStart = activeElement.selectionStart;
+        }
+
+        grid.innerHTML = '';
+        grid.className = 'min-h-screen w-full grid gap-4 items-center justify-center'; // Reset
+
+        let topPlayersCount = 0;
+        switch(gameState.playerCount) {
+            case 1: topPlayersCount = 0; grid.classList.add('grid-cols-1'); break;
+            case 2: topPlayersCount = 1; grid.classList.add('grid-cols-1'); break;
+            case 3: topPlayersCount = 1; grid.classList.add('grid-cols-2'); break;
+            case 4: topPlayersCount = 2; grid.classList.add('grid-cols-2'); break;
+            case 5: topPlayersCount = 3; grid.classList.add('grid-cols-6'); break;
+            case 6: topPlayersCount = 3; grid.classList.add('grid-cols-3'); break;
+        }
+
+        gameState.players.forEach((player, index) => {
+            const card = document.createElement('div');
+            card.className = 'player-card';
+            card.dataset.playerId = player.id;
+            
+            let rotationStyle = '';
+            if (index < topPlayersCount) {
+                rotationStyle = 'transform: rotate(180deg);';
+            }
+            if (gameState.playerCount === 3 && index === 0) {
+                 card.classList.add('col-span-2');
+            }
+            if (gameState.playerCount === 5) {
+                card.classList.add(index < 3 ? 'col-span-2' : 'col-span-3');
+            }
+
+            const cmdrHtml = Object.keys(player.commanderDamage).length > 0 ? `
+                <div class="w-full text-center mt-2">
+                    <h4 class="font-semibold text-sm mb-2" style="color: var(--text-secondary);">COMMANDER DAMAGE</h4>
+                    <div class="grid grid-cols-2 sm:grid-cols-3 gap-2 text-xs">
+                        ${Object.keys(player.commanderDamage).map(oppId => `
+                            <div class="p-2 rounded-lg" style="background-image: var(--accent-gold-bg);">
+                                <div class="font-bold" style="color: var(--text-on-gold);">From ${gameState.players.find(p => p.id == oppId).name}</div>
+                                <div class="flex items-center justify-center gap-2 mt-1">
+                                    <button data-action="dec-cmdr" data-opponent-id="${oppId}" class="cmdr-btn" style="background-color: rgba(0,0,0,0.1); border-color: rgba(0,0,0,0.2); color: var(--text-on-gold);">-</button>
+                                    <span data-type="cmdr" data-opponent-id="${oppId}" class="font-mono text-base font-bold" style="color: var(--text-on-gold);">${player.commanderDamage[oppId]}</span>
+                                    <button data-action="inc-cmdr" data-opponent-id="${oppId}" class="cmdr-btn" style="background-color: rgba(0,0,0,0.1); border-color: rgba(0,0,0,0.2); color: var(--text-on-gold);">+</button>
+                                </div>
+                            </div>`).join('')}
+                    </div>
+                </div>` : '';
+
+            const otherCountersHtml = gameState.showOtherCounters ? `
+                <div class="w-full text-center mt-2">
+                    <h4 class="font-semibold text-sm mb-2" style="color: var(--text-secondary);">OTHER COUNTERS</h4>
+                    <div class="grid grid-cols-2 gap-2 text-xs">
+                        <div class="p-2 rounded-lg" style="background-color: var(--bg-main);">
+                            <div class="font-bold" style="color: var(--text-secondary);">Poison</div>
+                            <div class="flex items-center justify-center gap-2 mt-1">
+                                <button data-action="dec-poison" class="other-counter-btn" style="background-color: #333; border-color: #444;">-</button>
+                                <span data-type="poison" class="font-mono text-base font-bold">${player.poison}</span>
+                                <button data-action="inc-poison" class="other-counter-btn" style="background-color: #333; border-color: #444;">+</button>
+                            </div>
+                        </div>
+                        <div class="p-2 rounded-lg" style="background-color: var(--bg-main);">
+                            <div class="font-bold" style="color: var(--text-secondary);">Energy</div>
+                            <div class="flex items-center justify-center gap-2 mt-1">
+                                <button data-action="dec-energy" class="other-counter-btn" style="background-color: #333; border-color: #444;">-</button>
+                                <span data-type="energy" class="font-mono text-base font-bold">${player.energy}</span>
+                                <button data-action="inc-energy" class="other-counter-btn" style="background-color: #333; border-color: #444;">+</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>` : '';
+            
+            card.style.cssText = rotationStyle;
+            card.innerHTML = `
+                <input type="text" value="${player.name}" class="player-name-input" style="${rotationStyle}">
+                <div class="grid grid-cols-3 items-center justify-items-center gap-3 w-full">
+                    <div class="flex flex-col gap-2 w-full">
+                        <button data-action="dec-life-5" class="life-adj-btn">-5</button>
+                        <button data-action="dec-life" class="life-adj-btn">-1</button>
+                    </div>
+                    <div class="life-total font-black text-7xl md:text-8xl select-none">${player.life}</div>
+                    <div class="flex flex-col gap-2 w-full">
+                         <button data-action="inc-life-5" class="life-adj-btn">+5</button>
+                         <button data-action="inc-life" class="life-adj-btn">+1</button>
+                    </div>
+                </div>
+                ${cmdrHtml}
+                ${otherCountersHtml}
+            `;
+            grid.appendChild(card);
+        });
+
+        // --- Restore focus after re-render ---
+        if (focusedPlayerId) {
+            const newActiveInput = dom.playerGrid.querySelector(`[data-player-id="${focusedPlayerId}"] .player-name-input`);
+            if (newActiveInput) {
+                newActiveInput.focus();
+                newActiveInput.selectionStart = newActiveInput.selectionEnd = selectionStart;
+            }
+        }
+    };
+
+    const updatePlayerCard = (player) => {
+        const card = dom.playerGrid.querySelector(`[data-player-id="${player.id}"]`);
+        if (!card) return;
+
+        card.querySelector('.life-total').textContent = player.life;
+        
+        if (gameState.showOtherCounters) {
+            const poisonCounter = card.querySelector('span[data-type="poison"]');
+            const energyCounter = card.querySelector('span[data-type="energy"]');
+            if(poisonCounter) poisonCounter.textContent = player.poison;
+            if(energyCounter) energyCounter.textContent = player.energy;
+        }
+
+        Object.keys(player.commanderDamage).forEach(oppId => {
+            const cmdrSpan = card.querySelector(`span[data-type="cmdr"][data-opponent-id="${oppId}"]`);
+            if (cmdrSpan) cmdrSpan.textContent = player.commanderDamage[oppId];
+        });
+    };
+
+    // --- EVENT HANDLING & ACTIONS ---
+    const handleGameInteraction = (e) => {
+        const button = e.target.closest('button[data-action]');
+        if (!button) return;
+
+        const card = button.closest('.player-card');
+        const playerId = parseInt(card.dataset.playerId, 10);
+        const player = gameState.players.find(p => p.id === playerId);
+        if (!player) return;
+
+        const action = button.dataset.action;
+        const opponentId = button.dataset.opponentId;
+        const opponent = opponentId ? gameState.players.find(p => p.id === parseInt(opponentId)) : null;
+
+        let logMessage = '';
+
+        switch (action) {
+            case 'inc-life': player.life++; logMessage = `${player.name}'s life +1 (now ${player.life}).`; break;
+            case 'dec-life': player.life--; logMessage = `${player.name}'s life -1 (now ${player.life}).`; break;
+            case 'inc-life-5': player.life += 5; logMessage = `${player.name}'s life +5 (now ${player.life}).`; break;
+            case 'dec-life-5': player.life -= 5; logMessage = `${player.name}'s life -5 (now ${player.life}).`; break;
+            case 'inc-cmdr': 
+                player.commanderDamage[opponentId]++;
+                player.life--; 
+                logMessage = `${player.name} took 1 commander damage from ${opponent.name}.`;
+                break;
+            case 'dec-cmdr':
+                if (player.commanderDamage[opponentId] > 0) {
+                    player.commanderDamage[opponentId]--;
+                    player.life++;
+                    logMessage = `Corrected commander damage for ${player.name} from ${opponent.name}.`;
+                }
+                break;
+            case 'inc-poison': player.poison++; logMessage = `${player.name} got 1 poison counter.`; break;
+            case 'dec-poison': if(player.poison > 0) player.poison--; logMessage = `${player.name} removed 1 poison counter.`; break;
+            case 'inc-energy': player.energy++; logMessage = `${player.name} gained 1 energy.`; break;
+            case 'dec-energy': if(player.energy > 0) player.energy--; logMessage = `${player.name} spent 1 energy.`; break;
+        }
+
+        if(logMessage) logAction(logMessage);
+        updatePlayerCard(player);
+    };
+    
+    const handleNameChange = (e) => {
+        const input = e.target;
+        const card = input.closest('.player-card');
+        const playerId = parseInt(card.dataset.playerId, 10);
+        const player = gameState.players.find(p => p.id === playerId);
+        if (player && player.name !== input.value) {
+            const oldName = player.name;
+            player.name = input.value;
+            logAction(`'${oldName}' was renamed to '${player.name}'.`);
+            renderGameBoard(); 
+        }
+    };
+
+    const highlightFirstPlayer = () => {
+        if (gameState.playerCount <= 1) return;
+        const firstPlayer = gameState.players[Math.floor(Math.random() * gameState.playerCount)];
+        const card = dom.playerGrid.querySelector(`[data-player-id="${firstPlayer.id}"]`);
+        if (!card) return;
+
+        logAction(`${firstPlayer.name} is the first player.`);
+        const badge = document.createElement('div');
+        badge.textContent = 'First Player';
+        badge.className = 'absolute -top-3 text-xs font-bold px-3 py-1 rounded-full shadow-lg opacity-0 transition-opacity duration-500';
+        badge.style.backgroundColor = 'var(--accent-spice)';
+        badge.style.color = 'white';
+        if (card.style.transform.includes('180')) {
+             badge.style.transform = 'rotate(180deg)';
+             badge.style.top = 'auto';
+             badge.style.bottom = '-0.75rem';
+        }
+        card.style.position = 'relative';
+        card.appendChild(badge);
+        
+        setTimeout(() => {
+            card.classList.add('first-player-glow');
+            badge.style.opacity = '1';
+        }, 100);
+
+        setTimeout(() => {
+            badge.style.opacity = '0';
+            card.classList.remove('first-player-glow');
+            setTimeout(() => badge.remove(), 500);
+        }, 3000);
+    };
+    
+    // --- SETTINGS & UTILITY ---
+    const updateToggleState = (toggle, isOn) => {
+        toggle.classList.toggle('on', isOn);
+    };
+    
+    const handleDiceRoll = (e) => {
+        const button = e.target.closest('button[data-sides]');
+        if (!button) return;
+        const sides = parseInt(button.dataset.sides, 10);
+        const result = Math.floor(Math.random() * sides) + 1;
+        dom.diceResult.textContent = result;
+        logAction(`Dice roll (D${sides}): ${result}.`);
+    };
+
+    const resetGame = () => {
+        gameState.players.forEach(p => {
+            p.life = gameState.startingLife;
+            p.poison = 0;
+            p.energy = 0;
+            Object.keys(p.commanderDamage).forEach(oppId => p.commanderDamage[oppId] = 0);
+        });
+        logAction('Game has been reset.');
+        renderGameBoard();
+        toggleModal(dom.settingsScreen, false);
+    };
+
+    const goHome = () => {
+        toggleModal(dom.settingsScreen, false);
+        dom.gameScreen.style.display = 'none';
+        dom.setupScreen.style.display = 'flex';
+        dom.diceResult.textContent = '-';
+    };
+
+    const toggleModal = (modal, show) => {
+        modal.style.display = show ? 'flex' : 'none';
+    };
+    
+    const showConfirmation = (title, message, callback) => {
+        dom.confirmationTitle.textContent = title;
+        dom.confirmationMessage.textContent = message;
+        confirmCallback = callback;
+        toggleModal(dom.confirmationModal, true);
+    };
+
+    const logAction = (message) => {
+        const timestamp = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        gameState.history.unshift({ timestamp, message });
+        if (gameState.history.length > 50) { 
+            gameState.history.pop();
+        }
+    };
+
+    const renderHistoryLog = () => {
+        dom.historyLog.innerHTML = gameState.history.length > 0 ?
+            gameState.history.map(entry => `
+                <div class="history-log-entry">
+                    <span class="font-mono" style="color: var(--text-secondary);">${entry.timestamp}</span>
+                    <p>${entry.message}</p>
+                </div>
+            `).join('') :
+            '<p style="color: var(--text-secondary);">No actions logged yet.</p>';
+    };
+
+    // --- START THE APP ---
+    initialize();
+});
+</script>
+
+</body>
+</html>
